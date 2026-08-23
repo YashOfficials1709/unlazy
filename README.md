@@ -16,6 +16,191 @@ The current source targets `2.1.0`. It is not identified here as a tagged GitHub
 
 ## Install
 
+## End-to-end example
+
+The easiest way to understand `unlazy` is to see the complete workflow.
+
+Suppose you have a payment module that needs to be refactored and you want an AI agent to verify that every migration path still works.
+
+### 1. Start the task
+
+```text
+/unlazy tree 5 refactor the payment module and verify every migration path
+```
+
+`unlazy` decomposes the request into a structured pipeline instead of relying on the agent to complete everything in one pass.
+
+### 2. Create the acceptance ledger
+
+For a solo task, create `GATES.md` from the provided template:
+
+```bash
+cp templates/gates-leaf.md GATES.md
+```
+
+The ledger defines exactly what must be true for the task to be considered complete:
+
+```markdown
+# Gates: payment refactor
+
+- [ ] G1: payment fixtures pass after the refactor
+  CHECK: node scripts/verify-payments.mjs
+  EXPECT: payment verification passed
+  EVIDENCE: pending
+
+- [ ] G2: every migration path succeeds
+  CHECK: node scripts/verify-migrations.mjs
+  EXPECT: migration verification passed
+  EVIDENCE: pending
+```
+
+### 3. Inspect before execution
+
+Run the checker in non-executing status mode:
+
+```bash
+node <path-to-skill>/scripts/gate-check.mjs --status GATES.md
+```
+
+You can now review the acceptance criteria without executing any commands.
+
+### 4. Review the execution oracle
+
+Normal mode resolves the commands, expectations, working directory, shell, and `PATH` before execution:
+
+```bash
+node <path-to-skill>/scripts/gate-check.mjs GATES.md
+```
+
+A new or unapproved gate does **not** immediately execute. Instead, the checker shows what would be run so it can be reviewed first.
+
+Example:
+
+```text
+Gate: G1
+CHECK: node scripts/verify-payments.mjs
+EXPECT: payment verification passed
+CWD: /project
+Shell: /bin/sh
+
+Approval required.
+```
+
+### 5. Approve the exact check
+
+After reviewing the command and its expected result:
+
+```bash
+node <path-to-skill>/scripts/gate-check.mjs --approve GATES.md
+```
+
+Approval is bound to the exact gate inputs, including the command, expectation, working directory, shell, timeout, limits, platform, and inherited `PATH`.
+
+Changing a bound input requires approval again.
+
+### 6. Execute the gate
+
+Run the checker again:
+
+```bash
+node <path-to-skill>/scripts/gate-check.mjs GATES.md
+```
+
+A gate passes only when:
+
+1. The command exits with status `0`.
+2. The declared `EXPECT:` matches the combined command output.
+
+Successful evidence is written back to the ledger.
+
+Example:
+
+```markdown
+- [x] G1: payment fixtures pass after the refactor
+  CHECK: node scripts/verify-payments.mjs
+  EXPECT: payment verification passed
+  EVIDENCE: exit=0; payment verification passed
+```
+
+### 7. Reverify everything
+
+Do not treat old evidence as proof of a new execution.
+
+Re-run every runnable gate, including gates that were previously marked complete:
+
+```bash
+node <path-to-skill>/scripts/gate-check.mjs --reverify GATES.md
+```
+
+This gives the final verification pass a fresh execution record.
+
+### The complete flow
+
+```text
+┌─────────────────────┐
+│      User task      │
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│   PLAN / DECOMPOSE  │
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│     GATES.md        │
+│ Acceptance criteria │
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│      --status       │
+│      Review only    │
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│      --approve      │
+│ Review exact oracle │
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│       Execute       │
+│  CHECK + EXPECT     │
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│      Evidence       │
+│ exit / output / env │
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│     --reverify      │
+│    Fresh evidence   │
+└─────────────────────┘
+```
+
+### What you get
+
+Instead of relying on an agent saying:
+
+```text
+"Done — everything works."
+```
+
+`unlazy` produces an auditable verification trail:
+
+```text
+Task
+ ├── acceptance criteria
+ ├── reviewed commands
+ ├── explicit approval
+ ├── execution results
+ ├── recorded evidence
+ └── fresh re-verification
+```
+
+The important distinction is that `unlazy` verifies the **declared command oracle**. It does not infer that an English description and arbitrary shell command are equivalent.
+
+For reliable gates, the check should read the artifact or service being verified, perform its assertions, and emit a success-only marker after those assertions pass.
+
+
 Use the [skills CLI](https://github.com/vercel-labs/skills) for supported agents:
 
 ```text
